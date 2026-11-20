@@ -1,0 +1,30 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0-azurelinux3.0 AS build
+WORKDIR /src
+
+COPY ["src/App.csproj", "src/"]
+RUN dotnet restore "src/App.csproj"
+
+COPY src/ src/
+WORKDIR /src/src
+RUN dotnet publish "App.csproj" \
+    -c Release \
+    -o /app/publish \
+    --no-restore \
+    /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-azurelinux3.0 AS runtime
+WORKDIR /app
+
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_EnableDiagnostics=0 \
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
+COPY --from=build --chown=app:app /app/publish .
+
+USER app
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/healthz || exit 1
+
+ENTRYPOINT ["dotnet", "App.dll"]
